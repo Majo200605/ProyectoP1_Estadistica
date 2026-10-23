@@ -1,0 +1,242 @@
+# PARTE 1: CARGA DE DATOS Y LIMPIEZA DE FILAS INCOMPLETAS
+> # ==============================================================================
+> 
+> # 1. Cargar el archivo interactivo
+> # Se usa skip = 7 para saltar los títulos/notas y tomar la cabecera real
+> # Se define 'na' para transformar celdas vacías y símbolos (*, ., ..) en NA
+> datos_raw <- read_excel(
++   file.choose(),
++   sheet = "Superficie y Producción",
++   skip = 7,
++   na = c("", "NA", "*", ".", "..", ",")
++ )
+>                                                                                      
+> # 2. Asegurar que las variables numéricas tengan el tipo de dato correcto
+> datos_raw$`Superficie Plantada (ha)`  <- as.numeric(datos_raw$`Superficie Plantada (ha)`)
+> datos_raw$`Superficie Cosechada (ha)` <- as.numeric(datos_raw$`Superficie Cosechada (ha)`)
+> datos_raw$`Producción (toneladas)`    <- as.numeric(datos_raw$`Producción (toneladas)`)
+> 
+> # 3. ELIMINAR FILAS CON CUALQUIER DATO VACÍO O FALTANTE
+> # na.omit() descarta toda fila que tenga al menos un valor NA en cualquiera de sus columnas
+> datos <- na.omit(datos_raw)
+> 
+> # 4. Verificación de la base depurada
+> cat("Registros leídos inicialmente:", nrow(datos_raw), "\n")
+Registros leídos inicialmente: 30493 
+> cat("Registros útiles tras eliminar filas incompletas:", nrow(datos), "\n\n")
+Registros útiles tras eliminar filas incompletas: 14405 
+
+> 
+> head(datos)
+# A tibble: 6 × 7
+    Año Cultivo             Provincia Tipo  Superficie Plantada …¹ Superficie Cosechada…²
+  <dbl> <chr>               <chr>     <chr>                  <dbl>                  <dbl>
+1  2002 Banano (Fruta Fres… Azuay     Solo                    1036                    822
+2  2002 Banano (Fruta Fres… Azuay     Asoc…                   1103                   1060
+3  2002 Banano (Fruta Fres… Bolívar   Solo                     518                    495
+4  2002 Banano (Fruta Fres… Bolívar   Asoc…                    257                    249
+5  2002 Banano (Fruta Fres… Cañar     Solo                    6204                   6071
+6  2002 Banano (Fruta Fres… Cañar     Asoc…                    194                    194
+# ℹ abbreviated names: ¹`Superficie Plantada (ha)`, ²`Superficie Cosechada (ha)`
+# ℹ 1 more variable: `Producción (toneladas)` <dbl>
+> str(datos)
+tibble [14,405 × 7] (S3: tbl_df/tbl/data.frame)
+ $ Año                      : num [1:14405] 2002 2002 2002 2002 2002 ...
+ $ Cultivo                  : chr [1:14405] "Banano (Fruta Fresca)" "Banano (Fruta Fresca)" "Banano (Fruta Fresca)" "Banano (Fruta Fresca)" ...
+ $ Provincia                : chr [1:14405] "Azuay" "Azuay" "Bolívar" "Bolívar" ...
+ $ Tipo                     : chr [1:14405] "Solo" "Asociado" "Solo" "Asociado" ...
+ $ Superficie Plantada (ha) : num [1:14405] 1036 1103 518 257 6204 ...
+ $ Superficie Cosechada (ha): num [1:14405] 822 1060 495 249 6071 ...
+ $ Producción (toneladas)   : num [1:14405] 377 262 3189 2012 157887 ...
+ - attr(*, "na.action")= 'omit' Named int [1:16088] 7 8 19 20 32 41 42 46 47 48 ...
+  ..- attr(*, "names")= chr [1:16088] "7" "8" "19" "20" ...
+> summary(datos)
+      Año            Cultivo          Provincia            Tipo      
+ Min.   :2002   Length   :14405   Length   :14405   Length   :14405  
+ 1st Qu.:2009   N.unique :   39   N.unique :   26   N.unique :    3  
+ Median :2015   N.blank  :    0   N.blank  :    0   N.blank  :    0  
+ Mean   :2014   Min.nchar:   16   Min.nchar:    4   Min.nchar:    4  
+ 3rd Qu.:2020   Max.nchar:   51   Max.nchar:   30   Max.nchar:   11  
+ Max.   :2025                                                        
+ Superficie Plantada (ha) Superficie Cosechada (ha) Producción (toneladas)
+ Min.   :     0.00        Min.   :     0.00         Min.   :      0.0     
+ 1st Qu.:    76.48        1st Qu.:    60.35         1st Qu.:     60.0     
+ Median :   353.11        Median :   290.30         Median :    447.1     
+ Mean   :  4057.66        Mean   :  3618.28         Mean   :  36615.3     
+ 3rd Qu.:  1764.00        3rd Qu.:  1553.66         3rd Qu.:   3024.3     
+ Max.   :274992.00        Max.   :268807.71         Max.   :8631295.1     
+> cat("\nConteo de datos faltantes tras limpieza:\n")
+
+Conteo de datos faltantes tras limpieza:
+> print(colSums(is.na(datos)))
+                      Año                   Cultivo                 Provincia 
+                        0                         0                         0 
+                     Tipo  Superficie Plantada (ha) Superficie Cosechada (ha) 
+                        0                         0                         0 
+   Producción (toneladas) 
+                        0 
+> 
+> # PARTE 2: MEDIDAS DESCRIPTIVAS DE UNA VARIABLE CUANTITATIVA
+> # ==============================================================================
+> # Variable cuantitativa seleccionada: Producción (toneladas)
+> # (Puedes cambiarla por datos$`Superficie Cosechada (ha)` si deseas)
+> x <- datos$`Producción (toneladas)`
+> x <- x[!is.na(x)]
+> 
+> # 1. Media aritmética
+> media <- mean(x)
+> cat("Media:", round(media, 4), "\n")
+Media: 36615.29 
+> 
+> # 2. Mediana
+> mediana <- median(x)
+> cat("Mediana:", round(mediana, 4), "\n")
+Mediana: 447.0973 
+> 
+> # 3. Moda
+> moda <- function(v) {
++   frecuencias <- table(v)
++   valores <- names(frecuencias)[frecuencias == max(frecuencias)]
++   as.numeric(valores)
++ }
+> cat("Moda(s):", paste(round(moda(x), 4), collapse = ", "), "\n")
+Moda(s): 8.1818, 30 
+> 
+> # 4. Cuartiles y extremos
+> cuartiles <- quantile(x, probs = c(0, 0.25, 0.50, 0.75, 1))
+> cat("\nCuartiles y extremos:\n")
+
+Cuartiles y extremos:
+> print(round(cuartiles, 4))
+          0%          25%          50%          75%         100% 
+      0.0000      60.0194     447.0973    3024.3229 8631295.1411 
+> 
+> # 5. Rango
+> rango <- max(x) - min(x)
+> cat("\nValor mínimo:", round(min(x), 4), "\n")
+
+Valor mínimo: 0 
+> cat("Valor máximo:", round(max(x), 4), "\n")
+Valor máximo: 8631295 
+> cat("Rango:", round(rango, 4), "\n")
+Rango: 8631295 
+> 
+> # 6. Desviación estándar muestral
+> desviacion <- sd(x)
+> cat("\nDesviación estándar muestral:", round(desviacion, 4), "\n")
+
+Desviación estándar muestral: 305639.3 
+> 
+> # 7. Coeficiente de variación
+> cv <- (desviacion / media) * 100
+> cat("Coeficiente de variación (%):", round(cv, 2), "%\n")
+Coeficiente de variación (%): 834.73 %
+> 
+> # 8. Asimetría y curtosis de Pearson
+> asimetria <- moments::skewness(x)
+> curtosis <- moments::kurtosis(x)
+> cat("\nCoeficiente de asimetría:", round(asimetria, 4), "\n")
+
+Coeficiente de asimetría: 16.3175 
+> cat("Coeficiente de curtosis de Pearson:", round(curtosis, 4), "\n")
+Coeficiente de curtosis de Pearson: 329.2502 
+> 
+> # PARTE 3: DIAGRAMA DE CAJA Y BIGOTES (BOXPLOT)
+> # ==============================================================================
+> boxplot(x,
++         main = "Distribución de Producción (toneladas)",
++         ylab = "Toneladas",
++         col = "lightblue",
++         border = "darkblue",
++         horizontal = FALSE)
+> 
+> atipicos <- boxplot.stats(x)$out
+> cat("Cantidad de valores atípicos identificados:", length(atipicos), "\n")
+Cantidad de valores atípicos identificados: 2302 
+> 
+> # PARTE 4: ANÁLISIS BIVARIADO (CORRELACIÓN Y REGRESIÓN LINEAL)
+> # ==============================================================================
+> # Variable X (independiente): Superficie Cosechada (ha)
+> # Variable Y (dependiente): Producción (toneladas)
+> base_xy <- data.frame(
++   X = datos$`Superficie Cosechada (ha)`,
++   Y = datos$`Producción (toneladas)`
++ )
+> base_xy <- na.omit(base_xy)
+> 
+> # 1. Coeficiente de correlación de Pearson y contraste de significancia
+> correlacion <- cor(base_xy$X, base_xy$Y, method = "pearson")
+> cat("Coeficiente de correlación de Pearson:", round(correlacion, 4), "\n")
+Coeficiente de correlación de Pearson: 0.4657 
+> 
+> prueba_cor <- cor.test(base_xy$X, base_xy$Y, method = "pearson")
+> print(prueba_cor)
+
+	Pearson's product-moment correlation
+
+data:  base_xy$X and base_xy$Y
+t = 63.15, df = 14403, p-value < 2.2e-16
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ 0.4527751 0.4783553
+sample estimates:
+      cor 
+0.4656625 
+
+> 
+> # 2. Ajuste del modelo de regresión lineal
+> modelo <- lm(Y ~ X, data = base_xy)
+> summary(modelo)
+
+Call:
+lm(formula = Y ~ X, data = base_xy)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-1581622    -9539    -3620    -2485  7701967 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 2332.701   2318.144   1.006    0.314    
+X              9.475      0.150  63.150   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 270500 on 14403 degrees of freedom
+Multiple R-squared:  0.2168,	Adjusted R-squared:  0.2168 
+F-statistic:  3988 on 1 and 14403 DF,  p-value: < 2.2e-16
+
+> 
+> intercepto <- coef(modelo)[1]
+> pendiente <- coef(modelo)[2]
+> R2 <- summary(modelo)$r.squared
+> 
+> cat("\nRECTA DE REGRESIÓN LINEAL\n")
+
+RECTA DE REGRESIÓN LINEAL
+> cat("Intercepto (a):", round(intercepto, 4), "\n")
+Intercepto (a): 2332.701 
+> cat("Pendiente (b):", round(pendiente, 4), "\n")
+Pendiente (b): 9.4748 
+> cat("Ecuación estimada:\n")
+Ecuación estimada:
+> cat("Producción estimada =", round(intercepto, 4), "+", round(pendiente, 4), "* Superficie Cosechada\n")
+Producción estimada = 2332.701 + 9.4748 * Superficie Cosechada
+> cat("Coeficiente de determinación R2:", round(R2, 4), "(", round(R2 * 100, 2), "%)\n")
+Coeficiente de determinación R2: 0.2168 ( 21.68 %)
+
+resumen$Resultado <- round(resumen$Resultado, 4)
+> print(resumen, row.names = FALSE)
+                       Medida    Resultado
+      Número de observaciones   14405.0000
+                        Media   36615.2939
+                      Mediana     447.0973
+                       Mínimo       0.0000
+          Primer cuartil (Q1)      60.0194
+          Tercer cuartil (Q3)    3024.3229
+                       Máximo 8631295.1411
+                        Rango 8631295.1411
+ Desviación estándar muestral  305639.3069
+ Coeficiente de variación (%)     834.7313
+                    Asimetría      16.3175
+          Curtosis de Pearson     329.2502
