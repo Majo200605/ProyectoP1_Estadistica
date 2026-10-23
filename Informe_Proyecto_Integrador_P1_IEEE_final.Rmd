@@ -438,6 +438,4 @@ El análisis se presenta mediante procedimientos reproducibles en R y resultados
 
 **Anexo A. Código reproducible.** El archivo `analisis_completo_color.R` contiene los procedimientos de importación, auditoría, normalización de etiquetas, tablas, estadísticos, correlaciones, gráficos y exportación de resultados CSV/PNG. El archivo `Informe_Proyecto_Integrador_P1_IEEE_final.Rmd` integra el script y genera el informe.
 
-**Anexo B. Archivos de salida.** El script genera la carpeta `salidas_proyecto`, que reúne la base normalizada, los CSV de auditoría, frecuencias, resumen cuantitativo, contingencia y correlación, además de los gráficos utilizados en el informe.
-
 **Anexo C. Repositorio del código fuente.** El código R y los recursos del Proyecto Integrador P1 están disponibles en el repositorio de GitHub: \url{https://github.com/Majo200605/ProyectoP1_Estadistica.git}.
