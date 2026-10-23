@@ -1,0 +1,316 @@
+# TALLER DE ESTADÍSTICA DESCRIPTIVA Y ANÁLISIS BIVARIADO
+# BASE DE DATOS: superficie-produccion.xlsx
+# HOJA: "Superficie y Producción"
+# ==============================================================================
+
+# Instalar librerías necesarias en caso de no tenerlas
+paquetes <- c("readxl", "moments")
+for (p in paquetes) {
+  if (!requireNamespace(p, quietly = TRUE)) install.packages(p)
+}
+library(readxl)
+library(moments)
+
+# ==============================================================================
+# PARTE 1: CARGA DE DATOS Y LIMPIEZA DE FILAS INCOMPLETAS
+# ==============================================================================
+
+# 1. Cargar el archivo interactivo
+# Se usa skip = 7 para saltar los títulos/notas y tomar la cabecera real
+# Se define 'na' para transformar celdas vacías y símbolos (*, ., ..) en NA
+datos_raw <- read_excel(
+  file.choose(),
+  sheet = "Superficie y Producción",
+  skip = 7,
+  na = c("", "NA", "*", ".", "..", ",")
+)
+
+# 2. Asegurar que las variables numéricas tengan el tipo de dato correcto
+datos_raw$`Superficie Plantada (ha)`  <- as.numeric(datos_raw$`Superficie Plantada (ha)`)
+datos_raw$`Superficie Cosechada (ha)` <- as.numeric(datos_raw$`Superficie Cosechada (ha)`)
+datos_raw$`Producción (toneladas)`    <- as.numeric(datos_raw$`Producción (toneladas)`)
+
+# 3. ELIMINAR FILAS CON CUALQUIER DATO VACÍO O FALTANTE
+# na.omit() descarta toda fila que tenga al menos un valor NA en cualquiera de sus columnas
+datos <- na.omit(datos_raw)
+
+# 4. Verificación de la base depurada
+cat("Registros leídos inicialmente:", nrow(datos_raw), "\n")
+cat("Registros útiles tras eliminar filas incompletas:", nrow(datos), "\n\n")
+
+head(datos)
+str(datos)
+summary(datos)
+cat("\nConteo de datos faltantes tras limpieza:\n")
+print(colSums(is.na(datos)))
+
+# PARTE 2: MEDIDAS DESCRIPTIVAS DE UNA VARIABLE CUANTITATIVA
+# ==============================================================================
+# Variable cuantitativa seleccionada: Producción (toneladas)
+# (Puedes cambiarla por datos$`Superficie Cosechada (ha)` si deseas)
+x <- datos$`Producción (toneladas)`
+x <- x[!is.na(x)]
+
+# 1. Media aritmética
+media <- mean(x)
+cat("Media:", round(media, 4), "\n")
+
+# 2. Mediana
+mediana <- median(x)
+cat("Mediana:", round(mediana, 4), "\n")
+
+# 3. Moda
+moda <- function(v) {
+  frecuencias <- table(v)
+  valores <- names(frecuencias)[frecuencias == max(frecuencias)]
+  as.numeric(valores)
+}
+cat("Moda(s):", paste(round(moda(x), 4), collapse = ", "), "\n")
+
+# 4. Cuartiles y extremos
+cuartiles <- quantile(x, probs = c(0, 0.25, 0.50, 0.75, 1))
+cat("\nCuartiles y extremos:\n")
+print(round(cuartiles, 4))
+
+# 5. Rango
+rango <- max(x) - min(x)
+cat("\nValor mínimo:", round(min(x), 4), "\n")
+cat("Valor máximo:", round(max(x), 4), "\n")
+cat("Rango:", round(rango, 4), "\n")
+
+# 6. Desviación estándar muestral
+desviacion <- sd(x)
+cat("\nDesviación estándar muestral:", round(desviacion, 4), "\n")
+
+# 7. Coeficiente de variación
+cv <- (desviacion / media) * 100
+cat("Coeficiente de variación (%):", round(cv, 2), "%\n")
+
+# 8. Asimetría y curtosis de Pearson
+asimetria <- moments::skewness(x)
+curtosis <- moments::kurtosis(x)
+cat("\nCoeficiente de asimetría:", round(asimetria, 4), "\n")
+cat("Coeficiente de curtosis de Pearson:", round(curtosis, 4), "\n")
+
+# PARTE 3: DIAGRAMA DE CAJA Y BIGOTES (BOXPLOT)
+# ==============================================================================
+boxplot(x,
+        main = "Distribución de Producción (toneladas)",
+        ylab = "Toneladas",
+        col = "lightblue",
+        border = "darkblue",
+        horizontal = FALSE)
+
+atipicos <- boxplot.stats(x)$out
+cat("Cantidad de valores atípicos identificados:", length(atipicos), "\n")
+
+# PARTE 4: ANÁLISIS BIVARIADO (CORRELACIÓN Y REGRESIÓN LINEAL)
+# ==============================================================================
+# Variable X (independiente): Superficie Cosechada (ha)
+# Variable Y (dependiente): Producción (toneladas)
+base_xy <- data.frame(
+  X = datos$`Superficie Cosechada (ha)`,
+  Y = datos$`Producción (toneladas)`
+)
+base_xy <- na.omit(base_xy)
+
+# 1. Coeficiente de correlación de Pearson y contraste de significancia
+correlacion <- cor(base_xy$X, base_xy$Y, method = "pearson")
+cat("Coeficiente de correlación de Pearson:", round(correlacion, 4), "\n")
+
+prueba_cor <- cor.test(base_xy$X, base_xy$Y, method = "pearson")
+print(prueba_cor)
+
+# 2. Ajuste del modelo de regresión lineal
+modelo <- lm(Y ~ X, data = base_xy)
+summary(modelo)
+
+intercepto <- coef(modelo)[1]
+pendiente <- coef(modelo)[2]
+R2 <- summary(modelo)$r.squared
+
+cat("\nRECTA DE REGRESIÓN LINEAL\n")
+cat("Intercepto (a):", round(intercepto, 4), "\n")
+cat("Pendiente (b):", round(pendiente, 4), "\n")
+cat("Ecuación estimada:\n")
+cat("Producción estimada =", round(intercepto, 4), "+", round(pendiente, 4), "* Superficie Cosechada\n")
+cat("Coeficiente de determinación R2:", round(R2, 4), "(", round(R2 * 100, 2), "%)\n")
+
+# 3. Diagrama de dispersión y recta de regresión
+plot(base_xy$X, base_xy$Y,
+     main = "Superficie Cosechada vs Producción",
+     xlab = "Superficie Cosechada (ha)",
+     ylab = "Producción (toneladas)",
+     pch = 19,
+     col = "blue")
+abline(modelo, col = "red", lwd = 2)
+legend("topleft",
+       legend = c("Registros", "Recta de regresión"),
+       col = c("blue", "red"),
+       pch = c(19, NA),
+       lty = c(NA, 1),
+       lwd = c(NA, 2),
+       bty = "n")
+
+# 4. Agregar estimaciones a la tabla
+base_xy$produccion_estimada <- predict(modelo)
+head(base_xy)
+
+# PARTE 5: TABLA RESUMEN DE MEDIDAS DESCRIPTIVAS
+# ==============================================================================
+resumen <- data.frame(
+  Medida = c(
+    "Número de observaciones",
+    "Media",
+    "Mediana",
+    "Mínimo",
+    "Primer cuartil (Q1)",
+    "Tercer cuartil (Q3)",
+    "Máximo",
+    "Rango",
+    "Desviación estándar muestral",
+    "Coeficiente de variación (%)",
+    "Asimetría",
+    "Curtosis de Pearson"
+  ),
+  Resultado = c(
+    length(x),
+    mean(x),
+    median(x),
+    min(x),
+    as.numeric(quantile(x, 0.25)),
+    as.numeric(quantile(x, 0.75)),
+    max(x),
+    diff(range(x)),
+    sd(x),
+    (sd(x) / mean(x)) * 100,
+    moments::skewness(x),
+    moments::kurtosis(x)
+  )
+)
+
+resumen$Resultado <- round(resumen$Resultado, 4)
+print(resumen, row.names = FALSE)
+
+# ==============================================================================
+# PARTE 6: TABULACIÓN CRUZADA (TABLAS DE CONTINGENCIA)
+# VARIABLES CUALITATIVAS: Provincia y Cultivo
+# ==============================================================================
+
+# 1. Definir variables cualitativas y frecuencias conjuntas
+var_filas <- datos$Provincia
+var_columnas <- datos$Cultivo
+
+# Tabla de frecuencias conjuntas absolutas (conteos)
+tabla_contingencia <- table(var_filas, var_columnas)
+
+# 2. Agregar sumas marginales: Totales por fila, por columna y gran total (n)
+tabla_con_totales <- addmargins(tabla_contingencia)
+
+cat("--- TABLA DE CONTINGENCIA: FRECUENCIAS ABSOLUTAS CON TOTALES ---\n")
+# Imprimimos una sección inicial para visualizarla con claridad en consola
+print(tabla_con_totales[1:6, 1:6])
+cat("(Nota: Mostrando primeras 5 filas y 5 columnas + sumas para mayor legibilidad)\n\n")
+
+# Para ver la tabla completa interactiva en RStudio:
+# View(as.data.frame.matrix(tabla_con_totales))
+
+# ------------------------------------------------------------------------------
+# 3. PORCENTAJES POR FILA (Condicionado a la fila)
+# Fórmula: (Valor / Total Fila) * 100
+# Responde a: ¿Cómo se distribuyen los cultivos dentro de cada provincia?
+# ------------------------------------------------------------------------------
+pct_fila <- prop.table(tabla_contingencia, margin = 1) * 100
+pct_fila_totales <- addmargins(pct_fila, margin = 2) # Suma 100% al final de cada fila
+
+cat("--- PORCENTAJE POR FILA (CONDICIONADO A LA PROVINCIA) ---\n")
+print(round(pct_fila_totales[1:6, 1:6], 2))
+cat("\n")
+
+# ------------------------------------------------------------------------------
+# 4. PORCENTAJES POR COLUMNA (Composición por columna)
+# Fórmula: (Valor / Total Columna) * 100
+# Responde a: ¿Cómo se distribuyen las provincias para cada tipo de cultivo?
+# ------------------------------------------------------------------------------
+pct_columna <- prop.table(tabla_contingencia, margin = 2) * 100
+pct_columna_totales <- addmargins(pct_columna, margin = 1) # Suma 100% al final de cada columna
+
+cat("--- PORCENTAJE POR COLUMNA (COMPOSICIÓN POR CULTIVO) ---\n")
+print(round(pct_columna_totales[1:6, 1:6], 2))
+cat("\n")
+
+# ------------------------------------------------------------------------------
+# 5. PORCENTAJE RESPECTO AL TOTAL GENERAL (n = 14405)
+# Fórmula: (Valor / n) * 100
+# ------------------------------------------------------------------------------
+pct_total <- prop.table(tabla_contingencia) * 100
+pct_total_con_sumas <- addmargins(pct_total)
+
+cat("--- PORCENTAJE SOBRE EL GRAN TOTAL DE REGISTROS ---\n")
+print(round(pct_total_con_sumas[1:6, 1:6], 2))
+cat("\n")
+
+# ------------------------------------------------------------------------------
+# 6. EXPORTAR LA TABLA COMPLETA A UN ARCHIVO CSV (Opcional para Excel)
+# ------------------------------------------------------------------------------
+# write.csv(as.data.frame.matrix(tabla_con_totales), 
+#           file = "tabla_contingencia_provincia_cultivo.csv")
+
+# ==============================================================================
+# VISUALIZAR TABLA DE CONTINGENCIA EN LA PESTAÑA "PLOTS"
+# ==============================================================================
+
+# Instalar y cargar gridExtra si no está disponible
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+  install.packages("gridExtra")
+}
+if (!requireNamespace("grid", quietly = TRUE)) {
+  install.packages("grid")
+}
+library(grid)
+library(gridExtra)
+
+# 1. Crear la tabla cruzada con sumas marginales
+tabla_cruzada <- table(datos$Provincia, datos$Cultivo)
+tabla_totales <- addmargins(tabla_cruzada)
+
+# 2. Seleccionar una sección representativa para que sea 100% legible en el visor
+# (Primeras 7 provincias y 6 cultivos más frecuentes + columna y fila de Totales)
+n_filas <- 7
+n_cols  <- 6
+
+sub_tabla <- tabla_totales[c(1:n_filas, nrow(tabla_totales)), 
+                           c(1:n_cols, ncol(tabla_totales))]
+
+df_plot <- as.data.frame.matrix(sub_tabla)
+# Agregar el nombre de la provincia como primera columna visible
+df_plot <- cbind(Provincia = rownames(df_plot), df_plot)
+rownames(df_plot) <- NULL
+
+# Renombrar la última fila de suma
+df_plot$Provincia[nrow(df_plot)] <- "Total (n)"
+
+# 3. Estilo visual de la tabla (paleta azul acorde al taller)
+tema_tabla <- ttheme_default(
+  core = list(
+    bg_params = list(fill = c("#F2F4F8", "#FFFFFF")),
+    fg_params = list(fontsize = 9)
+  ),
+  colhead = list(
+    bg_params = list(fill = "#2E5B82"),
+    fg_params = list(col = "white", fontface = "bold", fontsize = 9)
+  ),
+  rowhead = list(
+    fg_params = list(fontface = "bold", fontsize = 9)
+  )
+)
+
+# 4. Enviar la tabla directamente al panel de Plots
+grid.newpage()
+titulo <- textGrob("Tabulación Cruzada: Frecuencias Conjuntas y Totales", 
+                   gp = gpar(fontsize = 12, fontface = "bold", col = "#1F385C"), 
+                   y = 0.92)
+
+tabla_grafica <- tableGrob(df_plot, rows = NULL, theme = tema_tabla)
+
+grid.arrange(titulo, tabla_grafica, heights = c(0.12, 0.88))
