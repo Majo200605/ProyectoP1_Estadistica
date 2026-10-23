@@ -1,0 +1,443 @@
+---
+title: "Análisis estadístico descriptivo de superficie y producción agrícola en Ecuador, 2002–2025"
+author: "Martín Pérez; María José Quespas; Roberto Cordero; Danny Viver; Camila Vasquez; Andrea Sanchez"
+date: "22 de octubre de 2026"
+lang: es-EC
+documentclass: IEEEtran
+classoption:
+  - conference
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+    number_sections: true
+    toc: false
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{float}
+  - \usepackage{placeins}
+  - \usepackage{url}
+  - \usepackage{graphicx}
+  - \usepackage{xcolor}
+  - \usepackage{colortbl}
+  - \AtBeginDocument{\renewcommand{\tablename}{TABLA}\renewcommand{\figurename}{Fig.}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", fig.pos = "!t",
+                      fig.width = 3.35, fig.height = 2.35,
+                      out.width = "\\columnwidth", dev = "pdf")
+paquetes_reporte <- c("knitr", "kableExtra", "readxl", "dplyr", "tidyr", "ggplot2")
+faltan_reporte <- paquetes_reporte[!vapply(paquetes_reporte, requireNamespace, logical(1), quietly = TRUE)]
+if (length(faltan_reporte) > 0) {
+  stop(paste0("Faltan paquetes: ", paste(faltan_reporte, collapse = ", "),
+       ". Ejecute en la consola: install.packages(c(",
+       paste(sprintf('\\\"%s\\\"', faltan_reporte), collapse = ", "), "))"))
+}
+if (!file.exists("analisis_completo_color.R")) {
+  stop("Guarde analisis_completo_color.R, este archivo .Rmd y el Excel en la misma carpeta.")
+}
+source("analisis_completo_color.R", local = knitr::knit_global())
+
+# Tipografía de gráficos para una columna IEEE: legible al imprimir sin salir de los márgenes.
+tema_ieee_columna <- ggplot2::theme(
+  plot.title = ggplot2::element_text(size = 9, face = "bold"),
+  plot.subtitle = ggplot2::element_text(size = 7),
+  axis.text = ggplot2::element_text(size = 7),
+  axis.title = ggplot2::element_text(size = 8),
+  legend.text = ggplot2::element_text(size = 7),
+  legend.title = ggplot2::element_text(size = 8),
+  plot.margin = ggplot2::margin(3, 4, 3, 4)
+)
+# Envuelve el tabular para ocupar el ancho de columna (o de página en tablas*),
+# evitando que las tablas pequeñas queden estrechas y las anchas desborden el margen.
+wrap_tabular_ieee <- function(texto, ancho, font_size = 8) {
+  texto <- as.character(texto)
+  inicio <- regexpr("\\\\begin\\{tabular\\}", texto, perl = TRUE)
+  if (inicio[1] > 0) {
+    # Single-column tables shrink only if too wide; small tables are not enlarged unnaturally.
+    ancho_objetivo <- if (identical(ancho, "\\columnwidth")) {
+      "\\ifdim\\width>\\columnwidth\\columnwidth\\else\\width\\fi"
+    } else ancho
+    texto <- paste0(substr(texto, 1, inicio[1] - 1),
+                    "\\resizebox{", ancho_objetivo, "}{!}{%\n",
+                    "\\fontsize{", font_size, "}{", font_size + 1, "}\\selectfont\n",
+                    substr(texto, inicio[1], nchar(texto)))
+    fin <- regexpr("\\\\end\\{tabular\\}", texto, perl = TRUE)
+    if (fin[1] > 0) {
+      posicion_fin <- fin[1] + attr(fin, "match.length") - 1
+      texto <- paste0(substr(texto, 1, posicion_fin), "%\n}",
+                      substr(texto, posicion_fin + 1, nchar(texto)))
+    }
+  }
+  texto
+}
+
+aplicar_estilo_tabla <- function(salida, x) {
+  salida <- kableExtra::row_spec(salida, 0, bold = TRUE, color = "white", background = "#2E5B82")
+  if (nrow(x) > 0) {
+    filas_alternas <- seq(1, nrow(x), by = 2)
+    salida <- kableExtra::row_spec(salida, filas_alternas, background = "#EEF4F8")
+    primera_columna <- tolower(trimws(as.character(x[[1]])))
+    filas_total <- which(grepl("^(total|total general|total provincia|total 8 cultivos)", primera_columna))
+    if (length(filas_total) > 0) {
+      salida <- kableExtra::row_spec(salida, filas_total, bold = TRUE,
+                                     color = "#17324D", background = "#DCE8F5")
+    }
+  }
+  salida
+}
+
+tabla_ieee <- function(x, caption = NULL, digits = 2, font_size = 8) {
+  formato <- if (knitr::is_latex_output()) "latex" else "pipe"
+  salida <- knitr::kable(x, format = formato, booktabs = TRUE, caption = caption,
+                         digits = digits, escape = TRUE, row.names = FALSE)
+  if (knitr::is_latex_output()) {
+    salida <- aplicar_estilo_tabla(salida, x)
+    texto <- as.character(salida)
+    texto <- sub("\\begin{table}", "\\begin{table}[!t]", texto, fixed = TRUE)
+    texto <- wrap_tabular_ieee(texto, "\\columnwidth", font_size)
+    return(knitr::asis_output(texto))
+  }
+  salida
+}
+
+tabla_ieee_ancha <- function(x, caption = NULL, digits = 2, font_size = 8) {
+  formato <- if (knitr::is_latex_output()) "latex" else "pipe"
+  if (!knitr::is_latex_output()) {
+    return(knitr::kable(x, format = formato, booktabs = TRUE, caption = caption,
+                        digits = digits, escape = TRUE, row.names = FALSE))
+  }
+  salida <- knitr::kable(x, format = "latex", booktabs = TRUE, caption = caption,
+                         digits = digits, escape = TRUE, row.names = FALSE,
+                         table.envir = "table*")
+  salida <- aplicar_estilo_tabla(salida, x)
+  texto <- as.character(salida)
+  texto <- sub("\\begin{table*}", "\\begin{table*}[!t]", texto, fixed = TRUE)
+  texto <- wrap_tabular_ieee(texto, "\\textwidth", font_size)
+  knitr::asis_output(texto)
+}
+
+resumen_presentacion <- resumen_cuantitativas |>
+  dplyr::transmute(Variable = variable, n = n_valido, Faltantes = faltantes,
+    Media = media, Mediana = mediana, Moda = moda, Mínimo = minimo,
+    Q1 = Q1, Q3 = Q3, Máximo = maximo, Rango = rango, IQR = IQR,
+    Varianza = varianza_muestral, `Desv. estándar` = desviacion_estandar,
+    `CV (%)` = coeficiente_variacion_pct, Asimetría = asimetria,
+    `Curtosis (exceso)` = curtosis_exceso, `Atípicos (Tukey)` = atipicos_Tukey)
+
+freq_cultivo_presentacion <- top_cultivos_12 |>
+  dplyr::transmute(Cultivo = cultivo, Registros = registros, `Porcentaje (%)` = porcentaje)
+freq_tipo_presentacion <- freq_tipo |>
+  dplyr::transmute(Tipo = tipo, Registros = registros, `Porcentaje (%)` = porcentaje)
+freq_provincia_presentacion <- top_provincias_10 |>
+  dplyr::transmute(`Provincia/agrupación` = provincia, Registros = registros, `Porcentaje (%)` = porcentaje)
+# Crear esta tabla con indexación explícita evita errores al usar símbolos como nombres de columna.
+auditoria_tokens_presentacion <- data.frame(
+  Variable = auditoria_tokens[["variable"]],
+  Vacíos = auditoria_tokens[["vacios_o_NA"]],
+  `*` = auditoria_tokens[["asterisco"]],
+  `.` = auditoria_tokens[["punto"]],
+  `..` = auditoria_tokens[["doble_punto"]],
+  `,` = auditoria_tokens[["coma_aislada"]],
+  `No convertibles` = auditoria_tokens[["no_convertibles"]],
+  check.names = FALSE
+)
+
+n_registros <- nrow(datos)
+porc_completos_plantada <- mean(!is.na(datos$superficie_plantada)) * 100
+porc_completos_cosechada <- mean(!is.na(datos$superficie_cosechada)) * 100
+porc_completos_produccion <- mean(!is.na(datos$produccion)) * 100
+cultivo_principal <- freq_cultivo$cultivo[1]
+tipo_principal <- freq_tipo$tipo[1]
+q_plantada <- resumen_cuantitativas[resumen_cuantitativas$variable == "Superficie plantada (ha)", ]
+q_cosechada <- resumen_cuantitativas[resumen_cuantitativas$variable == "Superficie cosechada (ha)", ]
+q_produccion <- resumen_cuantitativas[resumen_cuantitativas$variable == "Producción (toneladas)", ]
+resumen_tabla_variable <- function(nombre_variable) {
+  fila <- resumen_presentacion[resumen_presentacion$Variable == nombre_variable, , drop = FALSE]
+  if (nrow(fila) != 1) stop(paste("No se encuentra resumen para", nombre_variable))
+  largo <- tidyr::pivot_longer(
+    fila, cols = -Variable, names_to = "Medida", values_to = "Resultado",
+    values_transform = list(Resultado = as.character)
+  )
+  largo$Resultado <- vapply(seq_len(nrow(largo)), function(i) {
+    nombre <- largo$Medida[i]
+    valor <- largo$Resultado[i]
+    if (is.na(valor) || !nzchar(valor)) return("No disponible")
+    if (nombre == "Moda") return(valor)
+    valor_num <- suppressWarnings(as.numeric(valor))
+    if (!is.finite(valor_num)) return(valor)
+    if (nombre %in% c("n", "Faltantes", "Atípicos (Tukey)")) {
+      return(format(valor_num, big.mark = ".", decimal.mark = ",", scientific = FALSE, trim = TRUE))
+    }
+    format(round(valor_num, 2), big.mark = ".", decimal.mark = ",", nsmall = 2,
+           scientific = FALSE, trim = TRUE)
+  }, character(1))
+  data.frame(Medida = largo$Medida, Resultado = largo$Resultado, check.names = FALSE)
+}
+r_total <- resumen_correlaciones$r_Pearson[1]
+r_cultivo <- resumen_correlaciones$r_Pearson[2]
+```
+
+\begin{abstract}
+Este estudio presenta una exploración descriptiva de la base histórica «Superficie y Producción», con registros anuales, cultivos, provincias o agrupaciones territoriales, modalidad de cultivo, superficie plantada, superficie cosechada y producción. Se construyó un flujo reproducible en R para auditar la calidad de la información, describir dos variables cualitativas y tres cuantitativas, examinar la tabla de contingencia entre cultivo y tipo y estimar la correlación de Pearson entre superficie cosechada y producción. La hoja entregada contiene `r format(n_registros, big.mark = ".", decimal.mark = ",")` registros entre `r min(datos$anio, na.rm = TRUE)` y `r max(datos$anio, na.rm = TRUE)`. Los resultados se interpretan como conteos de registros y asociaciones descriptivas, no como número de fincas ni como evidencia causal.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Estadística descriptiva, agricultura ecuatoriana, superficie cosechada, producción, ESPAC, R Markdown.
+\end{IEEEkeywords}
+
+\begin{center}
+\textbf{Universidad de las Américas}\\
+Facultad de Ingeniería y Ciencias Aplicadas\\
+ESTZ0055 -- Probabilidades y Estadística -- Proyecto Integrador 1
+\end{center}
+
+# Introducción
+
+La medición de la superficie agrícola y de la producción ayuda a describir la escala de las actividades agropecuarias y a explorar cómo se relaciona el área efectivamente cosechada con el volumen reportado. En Ecuador, la Encuesta de Superficie y Producción Agropecuaria Continua (ESPAC) es una fuente estadística oficial sobre el sector agropecuario; el INEC publica resultados, bases y documentación metodológica para distintos años [1], [2].
+
+El objetivo de este estudio es explorar la estructura de la base histórica «Superficie y Producción», resumir sus variables y evaluar relaciones descriptivas sin atribuir causalidad. Se busca responder: (1) ¿cómo se distribuyen los registros por cultivo y tipo?; (2) ¿qué magnitudes y dispersión presentan la superficie plantada, la cosechada y la producción?; (3) ¿cómo cambia la composición de tipos entre los cultivos más registrados?; y (4) ¿qué asociación lineal existe entre superficie cosechada y producción, especialmente al restringir la comparación a un solo cultivo?
+
+# Datos y preparación
+
+## Fuente, unidad de observación y variables
+
+Se leyó la hoja `r hoja` del archivo `r basename(archivo)`. La unidad analítica es cada fila identificada por la combinación año–cultivo–provincia o agrupación–tipo; por tanto, no equivale necesariamente a una finca individual. El periodo efectivamente leído se extiende de `r min(datos$anio, na.rm = TRUE)` a `r max(datos$anio, na.rm = TRUE)`. La base analítica contiene `r nrow(datos)` observaciones útiles y siete variables.
+
+```{r diccionario}
+diccionario <- data.frame(
+  Variable = c("Año", "Cultivo", "Provincia", "Tipo", "Superficie plantada (ha)",
+               "Superficie cosechada (ha)", "Producción (toneladas)"),
+  Clasificación = c("Temporal / discreta", "Cualitativa nominal", "Cualitativa nominal",
+                    "Cualitativa nominal", "Cuantitativa continua", "Cuantitativa continua",
+                    "Cuantitativa continua"),
+  Uso = c("Delimitar el periodo", "Comparar categorías de cultivo", "Describir cobertura territorial",
+          "Comparar modalidades registradas", "Resumir área inicialmente plantada",
+          "Resumir área efectivamente cosechada", "Describir volumen de producción"),
+  check.names = FALSE
+)
+tabla_ieee_ancha(diccionario, "Diccionario de las siete variables utilizadas", font_size = 8)
+```
+
+La base contiene `r dplyr::n_distinct(datos$cultivo)` etiquetas de cultivo, `r dplyr::n_distinct(datos$provincia)` etiquetas territoriales y `r dplyr::n_distinct(datos$tipo)` modalidades después de quitar espacios en blanco al inicio o final. La distribución de registros por año y la presencia territorial se usan como contexto del análisis.
+
+```{r registros-anio, fig.width=3.3, fig.height=2.3, fig.cap="Número de registros de la base por año. El conteo describe la composición del archivo, no producción anual agregada."}
+p_anio + tema_ieee_columna
+```
+
+```{r provincias, fig.width=3.3, fig.height=2.8, fig.cap="Diez provincias o agrupaciones territoriales con más registros en la base."}
+p_provincias + tema_ieee_columna
+```
+
+## Auditoría de calidad
+
+Los campos cuantitativos se importaron inicialmente como texto para identificar marcadores de ausencia antes de convertirlos a números. Las cadenas vacías, `*`, `.`, `..` y la coma aislada se consideran candidatos a dato faltante; nunca se convierten automáticamente en cero. Se recortaron los espacios iniciales y finales de las etiquetas categóricas. No se imputaron datos, ni se eliminaron registros de forma automática.
+
+```{r auditoria-general}
+tabla_ieee(auditoria_calidad, "Auditoría general de la base luego de normalizar etiquetas", font_size = 8)
+```
+
+```{r auditoria-tokens}
+tabla_ieee_ancha(auditoria_tokens_presentacion, "Auditoría de celdas vacías y marcadores en variables cuantitativas", font_size = 8)
+```
+
+En la columna `Tipo`, el archivo contiene `r n_tipo_original` etiquetas distintas si se cuentan los espacios finales y `r n_tipo_limpio` una vez normalizadas. Esta corrección de formato no modifica las superficies o la producción. El archivo contiene `r duplicados_exactos_originales` filas duplicadas exactas en los datos originales; tras normalizar espacios y campos numéricos se identifican `r duplicados_tras_normalizar` filas duplicadas. Además, `r sum(claves_repetidas$n - 1)` filas excedentes comparten la clave año–cultivo–provincia–tipo. Estos indicadores no justifican por sí solos la eliminación de registros. La tabla de auditoría cuantifica los campos faltantes y los posibles valores no convertibles detectados en la fuente.
+
+La documentación del Sistema de Información Pública Agropecuaria describe una serie provincial con 38 cultivos [3], mientras que en el archivo analizado se identifican `r dplyr::n_distinct(datos$cultivo)` etiquetas distintas. Esta diferencia puede estar asociada a la versión de la base o a criterios de codificación. Para mantener la trazabilidad, se conservaron las etiquetas presentes en el archivo y no se combinaron categorías sin sustento metodológico.
+
+# Variables seleccionadas y preguntas de análisis
+
+Se utilizaron las siete columnas de la base. Para las variables categóricas principales se eligieron **Cultivo** y **Tipo** porque describen las categorías agrícolas y la modalidad de registro. Las tres variables cuantitativas —superficie plantada, superficie cosechada y producción— son necesarias para comparar tendencia central y dispersión, identificar valores extremos y estudiar asociación lineal. Año y Provincia se usan para describir el periodo y la cobertura, además de servir como variables de identificación y segmentación.
+
+# Estadística descriptiva de variables cualitativas
+
+## Cultivo
+
+El cultivo con más registros es **`r cultivo_principal`**, con `r freq_cultivo$registros[1]` registros (`r round(freq_cultivo$porcentaje[1], 2)`% del total). Esta frecuencia mide cuántas filas corresponden a cada etiqueta; no equivale a hectáreas sembradas, cantidad de fincas ni volumen de producción.
+
+```{r frecuencia-cultivos}
+tabla_ieee_ancha(freq_cultivo_presentacion, "Doce cultivos con mayor frecuencia de registros", font_size = 8)
+```
+
+```{r grafico-cultivos, fig.width=7, fig.height=4.2, fig.env="figure*", out.width="\\textwidth", fig.pos="!t", fig.cap="Frecuencia de los doce cultivos con más registros. Se presenta un subconjunto para mantener la legibilidad; la tabla completa se exporta como CSV."}
+p_cultivos
+```
+
+## Tipo
+
+La modalidad más frecuente es **`r tipo_principal`** (`r freq_tipo$registros[1]` registros; `r round(freq_tipo$porcentaje[1], 2)`%). Las diferencias de frecuencia describen cómo están organizadas las observaciones del archivo. En particular, la categoría Invernadero debe interpretarse con cautela cuando presenta pocos registros, pues sus porcentajes pueden cambiar sustancialmente con una cantidad reducida de filas.
+
+```{r frecuencia-tipo}
+tabla_ieee(freq_tipo_presentacion, "Frecuencias absolutas y relativas de Tipo", font_size = 8)
+```
+
+```{r grafico-tipo, fig.width=3.3, fig.height=2.25, fig.cap="Frecuencia de registros por modalidad de cultivo después de normalizar espacios."}
+p_tipo + tema_ieee_columna
+```
+
+# Estadística descriptiva de variables cuantitativas
+
+Se calcularon número de observaciones válidas, valores faltantes, media, mediana, moda cuando se repite un valor, mínimo, cuartiles, máximo, rango, rango intercuartílico (IQR), varianza muestral, desviación estándar, coeficiente de variación, asimetría, curtosis en exceso y valores atípicos según la regla de Tukey (más allá de 1,5 IQR de los cuartiles). Los valores cero se conservan como datos observados y no se imputan ni se eliminan por defecto.
+
+### Superficie plantada (ha)
+
+```{r estadisticos-plantada}
+tabla_ieee(resumen_tabla_variable("Superficie plantada (ha)"),
+  "Medidas descriptivas de superficie plantada", font_size = 8)
+```
+
+### Superficie cosechada (ha)
+
+```{r estadisticos-cosechada}
+tabla_ieee(resumen_tabla_variable("Superficie cosechada (ha)"),
+  "Medidas descriptivas de superficie cosechada", font_size = 8)
+```
+
+### Producción (toneladas)
+
+```{r estadisticos-produccion}
+tabla_ieee(resumen_tabla_variable("Producción (toneladas)"),
+  "Medidas descriptivas de producción", font_size = 8)
+```
+
+En **superficie plantada**, la media es `r format(round(q_plantada$media, 2), big.mark = ".", decimal.mark = ",")` ha y la mediana es `r format(round(q_plantada$mediana, 2), big.mark = ".", decimal.mark = ",")` ha. En **superficie cosechada**, la media es `r format(round(q_cosechada$media, 2), big.mark = ".", decimal.mark = ",")` ha y la mediana es `r format(round(q_cosechada$mediana, 2), big.mark = ".", decimal.mark = ",")` ha. En **producción**, la media es `r format(round(q_produccion$media, 2), big.mark = ".", decimal.mark = ",")` toneladas y la mediana es `r format(round(q_produccion$mediana, 2), big.mark = ".", decimal.mark = ",")` toneladas.
+
+La diferencia entre media y mediana, junto con la asimetría calculada, permite evaluar si existen colas largas a la derecha. Los resultados de la base muestran `r if (all(resumen_cuantitativas$media > resumen_cuantitativas$mediana)) "una media superior a la mediana en las tres variables, comportamiento coherente con distribuciones sesgadas hacia valores altos" else "diferencias entre medias y medianas que varían según la variable"`. Los valores atípicos de Tukey son observaciones para revisión descriptiva; no se eliminan automáticamente porque pueden representar producciones o superficies reales de gran escala.
+
+Los histogramas y diagramas de caja de esta sección usan `log10(valor + 1)` **solo para mejorar la visualización** dada la disparidad de magnitudes; para esos gráficos se excluyen valores negativos o no finitos, que se identifican en la auditoría cuando corresponda. Las medidas de la tabla y el conteo de atípicos se calculan con los valores originales y sus unidades originales. En la correlación se utilizan pares completos y no negativos; cualquier registro negativo queda documentado en la auditoría para revisión.
+
+```{r hist-plantada, fig.width=3.3, fig.height=2.35, fig.cap="Histograma de superficie plantada representada mediante log10(valor + 1)."}
+p_hist_plantada + tema_ieee_columna
+```
+
+```{r box-plantada, fig.width=3.3, fig.height=2.25, fig.cap="Diagrama de caja de superficie plantada en escala logarítmica transformada para visualización."}
+p_box_plantada + tema_ieee_columna
+```
+
+```{r hist-cosechada, fig.width=3.3, fig.height=2.35, fig.cap="Histograma de superficie cosechada representada mediante log10(valor + 1)."}
+p_hist_cosechada + tema_ieee_columna
+```
+
+```{r box-cosechada, fig.width=3.3, fig.height=2.25, fig.cap="Diagrama de caja de superficie cosechada en escala logarítmica transformada para visualización."}
+p_box_cosechada + tema_ieee_columna
+```
+
+```{r hist-produccion, fig.width=3.3, fig.height=2.35, fig.cap="Histograma de producción representada mediante log10(valor + 1)."}
+p_hist_produccion + tema_ieee_columna
+```
+
+```{r box-produccion, fig.width=3.3, fig.height=2.25, fig.cap="Diagrama de caja de producción en escala logarítmica transformada para visualización."}
+p_box_produccion + tema_ieee_columna
+```
+
+
+# Relación entre variables cualitativas: Cultivo por Tipo
+
+Para mantener legible la tabla se seleccionaron los ocho cultivos con más registros. Esta selección se hace por frecuencia y se aplica de forma idéntica a las columnas de conteo y porcentaje. Los porcentajes son por fila: dentro de cada cultivo, indican la proporción de registros clasificados en cada tipo. Las tablas principales de esta sección abarcan ambas columnas mediante el entorno de tablas flotantes de IEEEtran; el cuerpo del artículo conserva dos columnas.
+
+```{r tabla-contingencia}
+tabla_ieee_ancha(contingencia_conteos, "Tabla de contingencia: frecuencias Cultivo × Tipo y totales marginales (ocho cultivos más registrados)", font_size = 8)
+```
+
+Los porcentajes por fila se calculan como frecuencia de la celda dividida para el total de su fila, multiplicado por 100. De ese modo, cada cultivo suma aproximadamente 100%, lo que permite responder: ¿cómo se distribuyen los tipos dentro de ese cultivo?
+
+```{r tabla-contingencia-pct}
+tabla_ieee_ancha(contingencia_porcentajes, "Porcentaje por fila: composición de Tipo dentro de cada Cultivo (%)", font_size = 8)
+```
+
+Los porcentajes por columna y respecto del total general también se calcularon. Para conservar una presentación concisa y legible en el formato IEEE, esas dos tablas complementarias se incluyen como archivos CSV de salida; en el cuerpo del artículo se priorizan las frecuencias absolutas y los porcentajes por fila, suficientes para interpretar la composición de los tipos dentro de cada cultivo.
+
+```{r grafico-contingencia, fig.width=3.35, fig.height=3.55, out.width="\\columnwidth", fig.cap="Composición porcentual de Tipo en los ocho cultivos con más registros. Cada barra representa el 100% de los registros del cultivo."}
+p_contingencia + tema_ieee_columna
+```
+
+La tabla de contingencia sigue la lógica vista en clase: categorías en filas y columnas, frecuencias conjuntas, sumas marginales y porcentajes condicionados por fila o columna. El análisis principal de contingencia se realiza entre Cultivo y Tipo, dos variables cualitativas relevantes para describir la modalidad de registro de los cultivos. Los conteos son registros de la base, no hectáreas ni producción, y no deben usarse para afirmar que una modalidad produce más que otra.
+
+## Tabla complementaria: Provincia × Cultivo
+
+### Frecuencias absolutas
+
+La tabla muestra el número de registros para seis cultivos visibles y siete provincias o agrupaciones territoriales. Los cultivos se eligieron para conservar el mismo extracto de la tabla de clase; no representan necesariamente los seis cultivos más frecuentes. Los encabezados se abrevian solo para facilitar la lectura: *Aguacate* corresponde a «Aguacate (Fruta Fresca)»; *Arroz*, a «Arroz (En Cáscara)»; *Arveja seca*, a «Arveja Seca (Grano Seco)»; *Arveja tierna*, a «Arveja Tierna (En Vaina)»; *Banano*, a «Banano (Fruta Fresca)»; y *Banano exportación*, a «Banano De Exportación En Monocultivo (Fruta Fresca)». **Total provincia** incluye los 39 cultivos del territorio, no solo los seis visibles. La fila **TOTAL GENERAL** resume la base completa: 14.405 registros; la cifra de cada cultivo visible corresponde a ese cultivo en toda la base.
+
+```{r tabla-provincia-cultivo-conteos}
+tabla_ieee_ancha(tabla_provincia_cultivo_conteos_muestra,
+  "Provincia × Cultivo: frecuencias absolutas y total de registros", font_size = 8)
+```
+
+### Porcentaje por fila (condicionado a la provincia)
+
+Cada porcentaje se obtiene dividiendo los registros de un cultivo por el total de registros de su provincia y multiplicando por 100. Por ello, la columna **Total (%)** suma 100% por fila aunque en la tabla solo se visualicen seis de las 39 categorías de cultivo.
+
+```{r tabla-provincia-cultivo-fila}
+tabla_ieee_ancha(tabla_provincia_cultivo_muestra,
+  "Provincia × Cultivo: porcentaje por fila condicionado a la provincia", font_size = 8)
+```
+
+```{r grafico-provincia-cultivo-fila, fig.width=7, fig.height=3.9, fig.env="figure*", out.width="\\textwidth", fig.pos="!t", fig.cap="Mapa de calor de los porcentajes por fila en la tabla Provincia × Cultivo. Siete territorios y seis cultivos; el denominador incluye todos los cultivos de cada provincia."}
+p_provincia_cultivo
+```
+
+Las dos tablas se complementan: las frecuencias absolutas indican cuántos registros se observan, mientras que los porcentajes facilitan comparar la composición de los territorios considerando el tamaño total de cada provincia o agrupación. Estas frecuencias describen el archivo de datos; no equivalen a hectáreas ni a toneladas producidas.
+
+
+# Relación entre variables cuantitativas: correlación
+
+Se estimó la correlación de Pearson entre **superficie cosechada** y **producción** utilizando los pares completos, finitos y no negativos y, para reducir el efecto de mezclar cultivos con escalas productivas diferentes, se repitió el cálculo dentro del cultivo con más registros: **`r cultivo_correlacion`**. El análisis de ese cultivo incluye `r nrow(datos_cor_cultivo)` pares completos. El coeficiente mide asociación lineal y no demuestra que un aumento de superficie cause, por sí mismo, un aumento de producción.
+
+```{r tabla-correlacion}
+tabla_ieee(resumen_correlaciones |>
+  dplyr::transmute(Universo = ifelse(Universo == "Todos los cultivos", "Base completa", "Cultivo principal"),
+    `Pares completos` = n_pares, `r de Pearson` = round(r_Pearson, 3),
+    `R² descriptivo` = round(R2_descriptivo, 3)),
+  "Correlación entre superficie cosechada y producción", font_size = 8)
+```
+
+En la base completa, el coeficiente es `r round(r_total, 3)`; al restringir al cultivo **`r cultivo_correlacion`**, el coeficiente es `r round(r_cultivo, 3)`. `r if (abs(r_cultivo) > abs(r_total)) "La asociación lineal es más intensa en el subconjunto de un solo cultivo; esto respalda la precaución de no mezclar productos con escalas y rendimientos heterogéneos." else "La asociación lineal no aumenta al restringir la base al cultivo seleccionado, por lo que conviene examinar otros subconjuntos y los supuestos del análisis."` Los p-valores y los intervalos se obtienen mediante `cor.test()` y se interpretan junto con el tamaño de muestra, el diagrama de dispersión y la posible influencia de valores extremos.
+
+```{r grafico-correlacion, fig.width=7, fig.height=4.0, fig.env="figure*", out.width="\\textwidth", fig.pos="!t", fig.cap="Diagrama de dispersión de superficie cosechada y producción para todos los registros válidos de la base, en unidades originales y con recta de regresión lineal."}
+p_correlacion
+```
+
+# Discusión, hallazgos y limitaciones
+
+Los hallazgos principales son: (1) la base contiene `r nrow(datos)` registros que abarcan `r min(datos$anio, na.rm = TRUE)`–`r max(datos$anio, na.rm = TRUE)`; (2) tras normalizar etiquetas, aparecen `r dplyr::n_distinct(datos$cultivo)` cultivos, `r dplyr::n_distinct(datos$provincia)` etiquetas territoriales y `r dplyr::n_distinct(datos$tipo)` tipos; (3) las medidas de tendencia central y los gráficos permiten describir una dispersión amplia entre registros; y (4) la comparación de correlación global y por cultivo muestra por qué conviene analizar subconjuntos comparables.
+
+Las preguntas descriptivas sobre la composición de los registros por cultivo y tipo, la dispersión de las tres variables cuantitativas y la dirección/intensidad de la asociación entre superficie cosechada y producción pueden abordarse con las tablas, gráficos y medidas calculadas. En cambio, no se puede establecer causalidad ni atribuir diferencias a factores climáticos, tecnológicos o económicos sin información adicional y métodos inferenciales o modelos específicos. La interpretación está limitada por la unidad observacional del archivo, la posible heterogeneidad de métodos y territorios a través del tiempo, y la presencia de valores extremos. Las filas de la base no representan necesariamente parcelas individuales. Los conteos de cultivo y tipo son conteos de registros, no áreas totales. Los valores atípicos no se eliminaron, pues pueden corresponder a observaciones reales de gran escala. Los resultados son descriptivos; por sí solos no permiten atribuir causalidad, evaluar significancia agronómica ni generalizar a toda la producción nacional. Esta última inferencia requeriría considerar los pesos, el diseño muestral y la metodología de la fuente.
+
+Se observa una diferencia entre las 38 categorías mencionadas en la documentación del SIPA y las 39 etiquetas identificadas en el archivo analizado. Una posible explicación es que existan diferencias de versión o que una categoría de exportación se registre por separado. La base se analizó conservando sus etiquetas originales normalizadas en espacios, sin excluir categorías para forzar coincidencia con otra versión.
+
+# Conclusiones
+
+El flujo reproducible permite auditar, limpiar etiquetas, resumir las variables y explorar relaciones con criterios consistentes. La mediana y los cuartiles son relevantes para describir registros típicos en distribuciones con valores extremos, mientras que la media y la desviación estándar resumen el tamaño y la dispersión en unidades originales. La tabla de contingencia revela diferencias en la composición de tipos entre cultivos sin confundir proporciones con hectáreas. La correlación de Pearson debe interpretarse considerando el cultivo, los valores atípicos y la heterogeneidad de la base.
+
+El análisis se presenta mediante procedimientos reproducibles en R y resultados vinculados a la base suministrada. La interpretación se limita al alcance descriptivo de las variables disponibles y a las características metodológicas documentadas de la fuente.
+
+# Declaración y verificación del uso de inteligencia artificial
+
+- **Herramienta utilizada:** ChatGPT (OpenAI).
+- **Finalidad:** apoyo en la organización del informe en formato IEEE, elaboración y depuración de código en R/R Markdown, y estructuración de tablas, gráficos e interpretaciones estadísticas.
+- **Prompt o instrucción utilizada:** elaborar el informe integral en formato IEEE, utilizar las variables disponibles en la base «Superficie y Producción» y proporcionar código reproducible en R/R Markdown.
+- **Respuesta o apoyo recibido:** estructura del informe, scripts para la auditoría y la estadística descriptiva, tablas de contingencia, análisis de correlación y visualizaciones.
+- **Decisiones metodológicas:** se utilizaron procedimientos reproducibles en R para calcular las medidas y producir las tablas y figuras. El gráfico principal de correlación presenta superficie cosechada y producción en sus unidades originales; las transformaciones logarítmicas se reservan para facilitar la lectura de algunas distribuciones univariadas.
+- **Verificación:** los resultados numéricos se obtienen mediante operaciones estadísticas ejecutadas en R sobre la base Excel. Las cifras reportadas se vinculan a las salidas del código y no a estimaciones textuales generadas por la IA. La diferencia entre las 38 categorías mencionadas en una referencia y las 39 etiquetas del archivo se declara explícitamente, sin armonizar categorías de forma arbitraria.
+- **Aporte al trabajo:** automatización de cálculos y visualizaciones, documentación de procedimientos estadísticos y organización de los resultados en una estructura académica uniforme. La IA se utilizó como herramienta de apoyo y no como fuente primaria de datos.
+
+# Referencias
+
+\begin{thebibliography}{00}
+\bibitem{inec-agro} Instituto Nacional de Estadística y Censos (INEC), “Estadísticas agropecuarias,” [En línea]. Disponible: \url{https://www.ecuadorencifras.gob.ec/estadisticas-agropecuarias-2/}. Consultado el 22-oct-2026.
+\bibitem{inec-historico} Instituto Nacional de Estadística y Censos (INEC), “Información de años anteriores – ESPAC,” [En línea]. Disponible: \url{https://www.ecuadorencifras.gob.ec/informacion-de-anos-anteriores-espac/}. Consultado el 22-oct-2026.
+\bibitem{sipa} Ministerio de Agricultura y Ganadería, Sistema de Información Pública Agropecuaria (SIPA), “Estadísticas productivas: Superficie y producción - INEC,” [En línea]. Disponible: \url{https://sipa.agricultura.gob.ec/index.php/sipa-estadisticas/estadisticas-descargas/estadisticas-productivas}. Consultado el 22-oct-2026.
+\bibitem{inec-anda} Instituto Nacional de Estadística y Censos (INEC), “Ecuador - Encuesta de Superficie y Producción Agropecuaria Continua 2025,” catálogo ANDA, [En línea]. Disponible: \url{https://anda.inec.gob.ec/anda5/index.php/catalog/1319}. Consultado el 22-oct-2026.
+\bibitem{base-equipo} “Superficie y Producción.xlsx,” archivo de datos entregado para el Proyecto Integrador P1 de Probabilidad y Estadística, Universidad de las Américas, hoja \texttt{Datos\_Depurados}, 2002–2025.
+\end{thebibliography}
+
+# Anexos técnicos
+
+**Anexo A. Código reproducible.** El archivo `analisis_completo_color.R` contiene los procedimientos de importación, auditoría, normalización de etiquetas, tablas, estadísticos, correlaciones, gráficos y exportación de resultados CSV/PNG. El archivo `Informe_Proyecto_Integrador_P1_IEEE_final.Rmd` integra el script y genera el informe.
+
+**Anexo B. Archivos de salida.** El script genera la carpeta `salidas_proyecto`, que reúne la base normalizada, los CSV de auditoría, frecuencias, resumen cuantitativo, contingencia y correlación, además de los gráficos utilizados en el informe.
+
+**Anexo C. Repositorio del código fuente.** El código R y los recursos del Proyecto Integrador P1 están disponibles en el repositorio de GitHub: \url{https://github.com/Majo200605/ProyectoP1_Estadistica.git}.
